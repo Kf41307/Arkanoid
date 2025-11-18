@@ -9,7 +9,7 @@
 #define PLATAFORMY 20.0f
 
 #define SCRENWIDTH 800
-#define SCREENHEIGHT 800
+#define SCREENHEIGHT 900
 using namespace std;
 
 void Movimentacao(Vector2 &pos, const int lastPos, const float dt){
