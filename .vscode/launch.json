@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "c:/Users/8463832/Desktop/Arkanoid",
-      "program": "c:/Users/8463832/Desktop/Arkanoid/build/Debug/outDebug",
+      "cwd": "c:/Users/Juca/OneDrive/Documentos/Vs Code/Algoritmos e Programação ll/Jogo Arkanoid (M3)",
+      "program": "c:/Users/Juca/OneDrive/Documentos/Vs Code/Algoritmos e Programação ll/Jogo Arkanoid (M3)/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [

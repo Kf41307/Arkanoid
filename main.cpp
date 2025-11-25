@@ -13,6 +13,8 @@
 #define SCREENHEIGHT 800
 using namespace std;
 
+float multiplicadorVelocidade = 1.0f;
+
 const int layoutF1[5][10] =
 {
     {1,1,1,1,1,1,1,1,1,1},
@@ -67,8 +69,8 @@ void colocarBolaNoPaddle(vector<Bola> &bolas, const Vector2 &posPaddle, const Ve
     b.raio = 10.0f;
     b.pos.x = posPaddle.x + tamPaddle.x / 2.0f;
     b.pos.y = posPaddle.y - b.raio - 1.0f;
-    b.vel.x = 200.0f;
-    b.vel.y = -200.0f;
+    b.vel.x = 200.0f * multiplicadorVelocidade;
+    b.vel.y = -200.0f * multiplicadorVelocidade;
     b.ativo = true;
     bolas.push_back(b);
 }
@@ -128,7 +130,8 @@ void checarColisoes(Bola &b, const Rectangle &paddle, vector<Bloco> &blocos){
         Bloco &bl = blocos[i];
         if(!bl.ativo) continue;
 
-        Rectangle r = {bl.x, bl.y, bl.largura, bl.altura};
+        bool colisao = false;
+
         Rectangle hitboxEsq= {bl.esquerda.x, bl.esquerda.y, bl.esquerda.largura, bl.esquerda.altura};
         Rectangle hitboxDir = {bl.direita.x, bl.direita.y, bl.direita.largura, bl.direita.altura};
         Rectangle hitboxCima = {bl.cima.x, bl.cima.y, bl.cima.largura, bl.cima.altura};
@@ -136,33 +139,22 @@ void checarColisoes(Bola &b, const Rectangle &paddle, vector<Bloco> &blocos){
 
         if(CheckCollisionCircleRec(b.pos, b.raio, hitboxEsq) || CheckCollisionCircleRec(b.pos, b.raio, hitboxDir)){
             b.vel.x *= -1;
-            bl.vidas--;
-
-            if(bl.vidas == 2) bl.cor = GREEN;
-            else if(bl.vidas == 1) bl.cor = YELLOW;
-            if(bl.vidas == 0) bl.ativo = false;
+            colisao = true;
         }
         if(CheckCollisionCircleRec(b.pos, b.raio, hitboxCima) || CheckCollisionCircleRec(b.pos, b.raio, hitboxBaixo)){
             b.vel.y *= -1;
+            colisao = true;
+        }
+
+        if(colisao){
             bl.vidas--;
 
             if(bl.vidas == 2) bl.cor = GREEN;
             else if(bl.vidas == 1) bl.cor = YELLOW;
             if(bl.vidas == 0) bl.ativo = false;
+
+            return;
         }
-
-        //if(CheckCollisionCircleRec(b.pos, b.raio, r)){
-//
- //           b.vel.y *= -1;
-  //          bl.vidas--;
-//
-
-//
-   //         if(bl.vidas == 2) bl.cor = GREEN;
-    //        else if(bl.vidas == 1) bl.cor = YELLOW;
-
-        //   if(bl.vidas == 0) bl.ativo = false;
-        //}
 
     }
 }
@@ -186,7 +178,6 @@ void carregarFases(vector<Bloco> &blocos, int fase){
             else if(fase == 2) valor = layoutF2[i][j];
             else valor = layoutF3[i][j];
 
-
             if(valor == 0) continue;
 
             Bloco b;
@@ -197,15 +188,15 @@ void carregarFases(vector<Bloco> &blocos, int fase){
             b.ativo = true;
             b.vidas = valor;
 
-            b.direita.x = 50 + j * largura;
-            b.direita.y = 121 + i * altura;
-            b.direita.largura = hitboxSize;
-            b.direita.altura = altura-2;
-
-            b.esquerda.x = largura + 50 + j * largura;
+            b.esquerda.x = 50 + j * largura;
             b.esquerda.y = 121 + i * altura;
             b.esquerda.largura = hitboxSize;
-            b.esquerda.altura = altura-2;
+            b.esquerda.altura  = altura - 2;
+
+            b.direita.x = 50 + j * largura + b.largura;
+            b.direita.y = 121 + i * altura;
+            b.direita.largura = hitboxSize;
+            b.direita.altura  = altura - 2;
 
             b.cima.x = 51 + j * largura;
             b.cima.y = 120 + i * altura;
@@ -227,29 +218,62 @@ void carregarFases(vector<Bloco> &blocos, int fase){
 }
 
 int Menu(){
-    Rectangle botaoJogar   = {300, 300, 200, 60};
-    Rectangle botaoRanking = {300, 400, 200, 60};
-    Rectangle botaoSair    = {300, 500, 200, 60};
+    Rectangle botaoJogar = {250, 250, 300, 80};
+    Rectangle botaoDificuldade = {250, 350, 300, 80};
+    Rectangle botaoRanking = {250, 450, 300, 80};
+    Rectangle botaoSair = {250, 550, 300, 80};
 
     Vector2 mouse = GetMousePosition();
 
-    Color corJogar   = CheckCollisionPointRec(mouse, botaoJogar)   ? RED : YELLOW;
+    Color corJogar = CheckCollisionPointRec(mouse, botaoJogar) ? RED : YELLOW;
+    Color corDificuldade = CheckCollisionPointRec(mouse, botaoDificuldade) ? RED : YELLOW;
     Color corRanking = CheckCollisionPointRec(mouse, botaoRanking) ? RED : YELLOW;
-    Color corSair    = CheckCollisionPointRec(mouse, botaoSair)    ? RED : YELLOW;
+    Color corSair = CheckCollisionPointRec(mouse, botaoSair) ? RED : YELLOW;
 
     if(IsMouseButtonPressed(MOUSE_LEFT_BUTTON)){
         if(CheckCollisionPointRec(mouse, botaoJogar)) return 1;
+        if(CheckCollisionPointRec(mouse, botaoDificuldade)) return 6;
         if (CheckCollisionPointRec(mouse, botaoRanking)) return 2;
         if (CheckCollisionPointRec(mouse, botaoSair)) return 3;                 
     }
 
     DrawRectangleRec(botaoJogar, corJogar);
+    DrawRectangleRec(botaoDificuldade, corDificuldade);
     DrawRectangleRec(botaoRanking, corRanking);
     DrawRectangleRec(botaoSair, corSair);
 
-    DrawText("JOGAR",   botaoJogar.x + 40,   botaoJogar.y + 15,   30, WHITE); 
-    DrawText("RANKING", botaoRanking.x + 30, botaoRanking.y + 15, 30, WHITE);
-    DrawText("SAIR",    botaoSair.x + 60,    botaoSair.y + 15,    30, WHITE);
+    DrawText("JOGAR", botaoJogar.x + 100, botaoJogar.y + 25, 30, WHITE); 
+    DrawText("DIFICULDADE", botaoDificuldade.x + 40, botaoDificuldade.y + 25, 30, WHITE);
+    DrawText("RANKING", botaoRanking.x + 85, botaoRanking.y + 25, 30, WHITE);
+    DrawText("SAIR", botaoSair.x + 120, botaoSair.y + 25, 30, WHITE);
+
+    return 0;
+}
+
+int MenuDificuldade(){
+    Rectangle botaoFacil = {250, 300, 300, 80};
+    Rectangle botaoMedio = {250, 400, 300, 80};
+    Rectangle botaoDificil = {250, 500, 300, 80};
+
+    Vector2 mouse = GetMousePosition();
+
+    Color corFacil = CheckCollisionPointRec(mouse, botaoFacil) ? RED : YELLOW;
+    Color corMedio = CheckCollisionPointRec(mouse, botaoMedio) ? RED : YELLOW;
+    Color corDificil = CheckCollisionPointRec(mouse, botaoDificil) ? RED : YELLOW;
+
+    if(IsMouseButtonPressed(MOUSE_LEFT_BUTTON)){
+        if(CheckCollisionPointRec(mouse, botaoFacil)) return 1;
+        if(CheckCollisionPointRec(mouse, botaoMedio)) return 2;
+        if(CheckCollisionPointRec(mouse, botaoDificil)) return 3;
+    }
+
+    DrawRectangleRec(botaoFacil, corFacil);
+    DrawRectangleRec(botaoMedio, corMedio);
+    DrawRectangleRec(botaoDificil, corDificil);
+
+    DrawText("FACIL", botaoFacil.x + 110, botaoFacil.y + 25, 30, WHITE); 
+    DrawText("MEDIO", botaoMedio.x + 110, botaoMedio.y + 25, 30, WHITE);
+    DrawText("DIFICIL", botaoDificil.x + 95, botaoDificil.y + 25, 30, WHITE);
 
     return 0;
 }
@@ -262,7 +286,6 @@ int main() {
     Vector2 tamPaddle = {PLATAFORMX, PLATAFORMY};
 
     vector<Bola> bolas;
-    colocarBolaNoPaddle(bolas, posPaddle, tamPaddle);
     
     Image image = LoadImage("Imagens/background.png");
     Texture2D texture = LoadTextureFromImage(image);
@@ -301,6 +324,10 @@ int main() {
 
             if(resetFase){
                 carregarFases(blocos, faseAtual);
+
+                bolas.clear();
+                colocarBolaNoPaddle(bolas, posPaddle, tamPaddle);
+
                 resetFase = false;
             }
 
@@ -398,15 +425,17 @@ int main() {
         if(estadoTela == 4){
             BeginDrawing();
 
-            DrawText("VOCê VENCEU", 230, 300, 50, GREEN);
-            DrawText("Pressione ENTER para voltar ao menu", 150, 400, 30, WHITE);
+            DrawRectangle(75, 275, 650, 250, BLACK);
+
+            DrawText("VOCê VENCEU", 235, 330, 50, GREEN);
+
+            DrawText("Pressione ENTER para voltar ao menu", 110, 430, 30, WHITE);
 
             if(IsKeyPressed(KEY_ENTER)){
                 faseAtual = 1;
                 vidas = 3;
                 blocos.clear();
                 bolas.clear();
-                colocarBolaNoPaddle(bolas, posPaddle, tamPaddle);
                 resetFase = true;
 
                 estadoTela = 0;
@@ -419,18 +448,42 @@ int main() {
         if(estadoTela == 5){
             BeginDrawing();
 
-            DrawRectangle(70, 350, 650, 250, BLACK);
-            DrawText("GAME OVER", 250, 420, 60, RED);
-            DrawText("Pressione ENTER para voltar ao menu", 130, 500, 30, WHITE);
+            DrawRectangle(75, 275, 650, 250, BLACK);
+
+            DrawText("GAME OVER", 240, 330, 60, RED);
+
+            DrawText("Pressione ENTER para voltar ao menu", 110, 430, 30, WHITE);
 
             if(IsKeyPressed(KEY_ENTER)){
                 faseAtual = 1;
                 vidas = 3;
                 blocos.clear();
                 bolas.clear();
-                colocarBolaNoPaddle(bolas, posPaddle, tamPaddle);
                 resetFase = true;
 
+                estadoTela = 0;
+            }
+
+            EndDrawing();
+            continue;
+        }
+
+        if(estadoTela == 6){
+            BeginDrawing();
+            ClearBackground(BLACK);
+
+            int escolha = MenuDificuldade();
+            
+            if(escolha == 1){
+                multiplicadorVelocidade = 1.0f;
+                estadoTela = 0;
+            }
+            else if(escolha == 2){
+                multiplicadorVelocidade = 1.25f;
+                estadoTela = 0;
+            }
+            else if(escolha == 3){
+                multiplicadorVelocidade = 1.50f;
                 estadoTela = 0;
             }
 
