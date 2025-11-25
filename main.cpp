@@ -17,9 +17,9 @@ const int layoutF1[5][10] =
 {
     {1,1,1,1,1,1,1,1,1,1},
     {1,1,1,1,1,1,1,1,1,1},
-    {2,2,2,2,2,2,2,2,2,2},
-    {2,2,2,2,2,2,2,2,2,2},
-    {3,3,3,3,3,3,3,3,3,3}
+    {1,1,1,1,1,1,1,1,1,1},
+    {1,1,1,1,1,1,1,1,1,1},
+    {2,2,2,2,2,2,2,2,2,2}
 };
 
 const int layoutF2[5][10] =
@@ -40,12 +40,19 @@ const int layoutF3[5][10] =
     {2,1,3,2,1,3,2,1,3,2}
 };
 
+struct Hitbox{
+    float x, y;
+    float largura, altura;
+    bool ativo;
+};
+
 struct Bloco{
     float x, y;
     float largura, altura;
     int vidas;
     Color cor;
     bool ativo;
+    Hitbox direita, esquerda, cima, baixo;
 };
 
 struct Bola{
@@ -122,18 +129,41 @@ void checarColisoes(Bola &b, const Rectangle &paddle, vector<Bloco> &blocos){
         if(!bl.ativo) continue;
 
         Rectangle r = {bl.x, bl.y, bl.largura, bl.altura};
+        Rectangle hitboxEsq= {bl.esquerda.x, bl.esquerda.y, bl.esquerda.largura, bl.esquerda.altura};
+        Rectangle hitboxDir = {bl.direita.x, bl.direita.y, bl.direita.largura, bl.direita.altura};
+        Rectangle hitboxCima = {bl.cima.x, bl.cima.y, bl.cima.largura, bl.cima.altura};
+        Rectangle hitboxBaixo = {bl.baixo.x, bl.baixo.y, bl.baixo.largura, bl.baixo.altura};
 
-        if(CheckCollisionCircleRec(b.pos, b.raio, r)){
-
-            b.vel.y *= -1;
-
+        if(CheckCollisionCircleRec(b.pos, b.raio, hitboxEsq) || CheckCollisionCircleRec(b.pos, b.raio, hitboxDir)){
+            b.vel.x *= -1;
             bl.vidas--;
 
-            //if(bl.vidas == 2) bl.cor = GREEN;
-            //else if(bl.vidas == 1) bl.cor = YELLOW;
-
+            if(bl.vidas == 2) bl.cor = GREEN;
+            else if(bl.vidas == 1) bl.cor = YELLOW;
             if(bl.vidas == 0) bl.ativo = false;
         }
+        if(CheckCollisionCircleRec(b.pos, b.raio, hitboxCima) || CheckCollisionCircleRec(b.pos, b.raio, hitboxBaixo)){
+            b.vel.y *= -1;
+            bl.vidas--;
+
+            if(bl.vidas == 2) bl.cor = GREEN;
+            else if(bl.vidas == 1) bl.cor = YELLOW;
+            if(bl.vidas == 0) bl.ativo = false;
+        }
+
+        //if(CheckCollisionCircleRec(b.pos, b.raio, r)){
+//
+ //           b.vel.y *= -1;
+  //          bl.vidas--;
+//
+
+//
+   //         if(bl.vidas == 2) bl.cor = GREEN;
+    //        else if(bl.vidas == 1) bl.cor = YELLOW;
+
+        //   if(bl.vidas == 0) bl.ativo = false;
+        //}
+
     }
 }
 
@@ -145,7 +175,7 @@ void carregarFases(vector<Bloco> &blocos, int fase){
 
     float largura = 70;
     float altura = 30;
-
+    float hitboxSize = 1;
 
     for(int i = 0; i < linhas; i++){
         for(int j = 0; j < colunas; j++){
@@ -166,6 +196,26 @@ void carregarFases(vector<Bloco> &blocos, int fase){
             b.altura = altura - 4;
             b.ativo = true;
             b.vidas = valor;
+
+            b.direita.x = 50 + j * largura;
+            b.direita.y = 121 + i * altura;
+            b.direita.largura = hitboxSize;
+            b.direita.altura = altura-2;
+
+            b.esquerda.x = largura + 50 + j * largura;
+            b.esquerda.y = 121 + i * altura;
+            b.esquerda.largura = hitboxSize;
+            b.esquerda.altura = altura-2;
+
+            b.cima.x = 51 + j * largura;
+            b.cima.y = 120 + i * altura;
+            b.cima.largura = largura-2;
+            b.cima.altura = hitboxSize;
+
+            b.baixo.x = 51 + j * largura;
+            b.baixo.y = altura + 120 + i * altura;
+            b.baixo.largura = largura-2;
+            b.baixo.altura = hitboxSize;
 
             if(b.vidas == 1) b.cor = YELLOW;
             else if(b.vidas == 2) b.cor = GREEN;
@@ -214,7 +264,7 @@ int main() {
     vector<Bola> bolas;
     colocarBolaNoPaddle(bolas, posPaddle, tamPaddle);
     
-    Image image = LoadImage("background.png");
+    Image image = LoadImage("Imagens/background.png");
     Texture2D texture = LoadTextureFromImage(image);
     UnloadImage(image);
 
@@ -281,7 +331,17 @@ int main() {
 
                 if(b.ativo){
                     Rectangle r = {b.x, b.y, b.largura, b.altura};
+                    Rectangle hitboxEsq= {b.esquerda.x, b.esquerda.y, b.esquerda.largura, b.esquerda.altura};
+                    Rectangle hitboxDir = {b.direita.x, b.direita.y, b.direita.largura, b.direita.altura};
+                    Rectangle hitboxCima = {b.cima.x, b.cima.y, b.cima.largura, b.cima.altura};
+                    Rectangle hitboxBaixo = {b.baixo.x, b.baixo.y, b.baixo.largura, b.baixo.altura};
+                    
+                    DrawRectangleRec(hitboxEsq, b.cor);
+                    DrawRectangleRec(hitboxDir, b.cor);
+                    DrawRectangleRec(hitboxCima, b.cor);
+                    DrawRectangleRec(hitboxBaixo, b.cor);
                     DrawRectangleRec(r, b.cor);
+
                 }
             }
 
@@ -314,7 +374,6 @@ int main() {
                 if(faseAtual > 3) estadoTela = 4; // Vitoria
                 else resetFase = true;
             }
-
             DrawFPS(40, 30);
             EndDrawing();
         }
@@ -380,8 +439,6 @@ int main() {
         }
     }
     
-    cout<<"Teste github"<<endl;
-
     CloseWindow();
     return 0;
 }
