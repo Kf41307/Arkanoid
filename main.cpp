@@ -3,6 +3,7 @@
 #include <vector>
 #include <ctime>
 #include <fstream>
+#include <cstdlib>
 
 #define LEFT 2
 #define RIGHT 3
@@ -13,7 +14,17 @@
 
 #define SCREENWIDTH 800
 #define SCREENHEIGHT 800
+
+const float VelocidadeBola = 200.0f;
 using namespace std;
+
+int multiplicadorPontos = 1;
+int inversorPontuacao = 1;
+float tempoMultiplicador = 0.0f;
+float tempoInversor = 0.0f;
+float tempoPaddleLento = 0.0f;
+
+float velocidadePaddleAtual = SPEED;
 
 float multiplicadorVelocidade = 1.0f;
 
@@ -28,7 +39,7 @@ const int layoutF1[5][10] =
 
 const int layoutF2[5][10] =
 {
-    {1,0,1,0,1,0,1,0,1,0},
+    {0,0,1,0,1,0,1,0,1,0},
     {0,2,0,2,0,2,0,2,0,2},
     {3,0,3,0,3,0,3,0,3,0},
     {0,2,0,2,0,2,0,2,0,2},
@@ -59,7 +70,7 @@ struct Bloco{
     //Color cor;
     bool ativo;
     Hitbox direita, esquerda, cima, baixo;
-    Texture2D nomeTextura;
+    Texture2D* nomeTextura;
     int pontos;
 };
 
@@ -68,6 +79,7 @@ struct Bola{
     Vector2 vel;
     float raio;
     bool ativo;
+    bool preso;
 };
 
 struct Ranking{
@@ -79,29 +91,37 @@ struct Ranking{
     string hora_fim;
 };
 
+struct ItemBonus{
+    Vector2 pos;
+    float velY;
+    int tipo;
+    bool ativo;
+};
+
 void colocarBolaNoPaddle(vector<Bola> &bolas, const Vector2 &posPaddle, const Vector2 tamPaddle){
     Bola b;
     b.raio = 10.0f;
     b.pos.x = posPaddle.x + tamPaddle.x / 2.0f;
     b.pos.y = posPaddle.y - b.raio - 1.0f;
-    b.vel.x = 200.0f * multiplicadorVelocidade;
-    b.vel.y = -200.0f * multiplicadorVelocidade;
+    b.vel.x = 0.0f * multiplicadorVelocidade;
+    b.vel.y = 0.0f * multiplicadorVelocidade;
     b.ativo = true;
+    b.preso = true;
     bolas.push_back(b);
 }
 
-void movimentarPaddle(Vector2 &pos, const int lastPos, const float dt){
+void movimentarPaddle(Vector2 &pos, const int lastPos, const float dt, const Vector2 &tamPaddle){
     switch(lastPos){
         case LEFT:
-            pos.x -= SPEED * dt;
-            if (pos.x < 29) {
-                pos.x = 29;
+            pos.x -= velocidadePaddleAtual * dt;
+            if (pos.x < 30) {
+                pos.x = 30;
             }
             break;
         case RIGHT:
-            pos.x += SPEED * dt;
-            if (pos.x > 671) {
-                pos.x = 671;
+            pos.x += velocidadePaddleAtual * dt;
+            if (pos.x + tamPaddle.x > 770) {
+                pos.x = 770 - tamPaddle.x;
             }
             break;
     }
@@ -109,12 +129,13 @@ void movimentarPaddle(Vector2 &pos, const int lastPos, const float dt){
 
 void movimentarBola(Bola &b, const float dt){
     if(!b.ativo) return;
+    if(b.preso) return;
 
     b.pos.x += b.vel.x * dt;
     b.pos.y += b.vel.y * dt;
 
     if(b.pos.x - b.raio <= 30){
-        b.pos.x = 47 + b.raio;
+        b.pos.x = 30 + b.raio;
         b.vel.x *= -1;
     }
 
@@ -133,12 +154,17 @@ void movimentarBola(Bola &b, const float dt){
     }
 }
 
-void checarColisoes(Bola &b, const Rectangle &paddle, vector<Bloco> &blocos, Ranking &jogoAtual){
+void checarColisoes(Bola &b, const Rectangle &paddle, vector<Bloco> &blocos, Ranking &jogoAtual, vector<ItemBonus> &itensBonus){
     if(!b.ativo) return;
+    if(b.preso) return;
 
     if(CheckCollisionCircleRec(b.pos, b.raio, paddle)){ 
         b.pos.y = paddle.y - b.raio - 1.0f;
         b.vel.y *= -1;
+
+        float centroPaddleX = paddle.x + paddle.width / 2.0f;
+        float desloc = (b.pos.x - centroPaddleX) / (paddle.width / 2.0f); // -1 ou 1
+        b.vel.x += desloc * 100.0f;
     }
 
     for(int i = 0; i < (int)blocos.size(); i++){
@@ -154,10 +180,18 @@ void checarColisoes(Bola &b, const Rectangle &paddle, vector<Bloco> &blocos, Ran
 
         if(CheckCollisionCircleRec(b.pos, b.raio, hitboxEsq) || CheckCollisionCircleRec(b.pos, b.raio, hitboxDir)){
             b.vel.x *= -1;
+
+            if(CheckCollisionCircleRec(b.pos, b.raio, hitboxEsq))  b.pos.x = bl.x - b.raio;
+            if(CheckCollisionCircleRec(b.pos, b.raio, hitboxDir))  b.pos.x = bl.x + bl.largura + b.raio;
+
             colisao = true;
         }
         if(CheckCollisionCircleRec(b.pos, b.raio, hitboxCima) || CheckCollisionCircleRec(b.pos, b.raio, hitboxBaixo)){
             b.vel.y *= -1;
+            
+            if(CheckCollisionCircleRec(b.pos, b.raio, hitboxCima))  b.pos.y = bl.y - b.raio;
+            if(CheckCollisionCircleRec(b.pos, b.raio, hitboxBaixo)) b.pos.y = bl.y + bl.altura + b.raio;
+
             colisao = true;
         }
 
@@ -166,7 +200,23 @@ void checarColisoes(Bola &b, const Rectangle &paddle, vector<Bloco> &blocos, Ran
 
             if(bl.vidas == 0){
                 bl.ativo = false;
-                jogoAtual.pontuacao += bl.pontos;
+                jogoAtual.pontuacao += bl.pontos * multiplicadorPontos * inversorPontuacao;
+
+                int chance = rand() % 10;
+                
+                if(chance == 9 || chance == 8){
+                    
+                    float cx = bl.x + bl.largura / 2.0f;
+                    float cy = bl.y + bl.altura / 2.0f;
+
+                    int tipo = rand() % 8;
+                    ItemBonus it;
+                    it.pos = { cx, cy };
+                    it.velY = 120.0f; 
+                    it.tipo = tipo;
+                    it.ativo = true;
+                    itensBonus.push_back(it);
+                }
             }
 
             return;
@@ -175,7 +225,7 @@ void checarColisoes(Bola &b, const Rectangle &paddle, vector<Bloco> &blocos, Ran
     }
 }
 
-void carregarFases(vector<Bloco> &blocos, int fase, Texture2D textura4, Texture2D textura5, Texture2D textura6){
+void carregarFases(vector<Bloco> &blocos, int fase, Texture2D &textura4, Texture2D &textura5, Texture2D &textura6){
     blocos.clear();
 
     int linhas = 5;
@@ -224,19 +274,19 @@ void carregarFases(vector<Bloco> &blocos, int fase, Texture2D textura4, Texture2
             b.baixo.largura = largura-2;
             b.baixo.altura = hitboxSize;
 
-            //b.cor = BLACK;
+            //b.cor = BLACK; //Cor da hitbox se precisar
 
             if(b.vidas == 1){
                 b.pontos = 50;
-                b.nomeTextura = textura4;
+                b.nomeTextura = &textura4;
             } 
             else if(b.vidas == 2){
                 b.pontos = 100;
-                b.nomeTextura = textura5;
+                b.nomeTextura = &textura5;
             }
             else{
                 b.pontos = 200;
-                b.nomeTextura = textura6;
+                b.nomeTextura = &textura6;
             }
 
             blocos.push_back(b);
@@ -476,10 +526,130 @@ void salvarTempo(Ranking &jogoAtual, bool &tempoRegistrado, time_t jogoInicio){
     tempoRegistrado = true;
 }
 
+void aplicarEfeitosBonus(int tipo, Ranking &jogoAtual, Vector2 &tamPaddle, vector<Bola> &bolas, int &vidas){
+    if(tipo == 0){
+        vidas++;
+    }else if(tipo == 1){
+        tamPaddle.x += 20;
+        if(tamPaddle.x > 300) tamPaddle.x = 300;
+    }else if(tipo == 2){
+        jogoAtual.pontuacao += 500 * multiplicadorPontos * inversorPontuacao;
+    }else if(tipo == 3){
+        multiplicadorPontos = 2;
+        tempoMultiplicador = 60.0f;
+    }else if(tipo == 5){
+        tamPaddle.x -= 20;
+        if(tamPaddle.x < 40) tamPaddle.x = 40;
+    }else if(tipo == 6){
+        inversorPontuacao = -1;
+        tempoInversor = 60.0f;
+    }else if(tipo == 7){
+        velocidadePaddleAtual = velocidadePaddleAtual * 0.7f;
+        tempoPaddleLento = 20.0f;
+        if(velocidadePaddleAtual < 80.0f) velocidadePaddleAtual = 80.0f;
+    }
+}
+
+void movimentarEDesenharBonus(float dt, vector<ItemBonus> &bonusItens, const Rectangle &paddle, Ranking &jogoAtual, Vector2 &tamPaddle, vector<Bola> &bolas, int &vidas, const Vector2 &posPaddle,
+                              Texture2D texturePontos, Texture2D textureMultiplicador, Texture2D textureAumPaddle, Texture2D textureDimPaddle, Texture2D textureInverter, Texture2D textureDimVel, Texture2D textureVida)
+{
+    for(int i = 0; i < (int)bonusItens.size(); ++i){
+        ItemBonus &it = bonusItens[i];
+        if(!it.ativo) continue;
+
+        it.pos.y += it.velY * dt;
+
+        Texture2D tex = texturePontos;
+        if(it.tipo == 0) tex = textureVida;            // vida++
+        else if(it.tipo == 1) tex = textureAumPaddle;  // aumento paddle
+        else if(it.tipo == 2) tex = texturePontos;     // pontos extras
+        else if(it.tipo == 3) tex = textureMultiplicador; // multiplicador
+        else if(it.tipo == 4) tex = texturePontos;     // bolas extras (reusar pontos se não tiver textura específica)
+        else if(it.tipo == 5) tex = textureDimPaddle;  // diminuir paddle
+        else if(it.tipo == 6) tex = textureInverter;   // inversor
+        else if(it.tipo == 7) tex = textureDimVel;     // diminuir velocidade paddle
+
+        Rectangle src = { 0.0f, 0.0f, (float)tex.width, (float)tex.height };
+        float size = 24.0f;
+        Rectangle dst = { it.pos.x - size/2.0f, it.pos.y - size/2.0f, size, size };
+        Vector2 origin = { 0.0f, 0.0f };
+        DrawTexturePro(tex, src, dst, origin, 0.0f, WHITE);
+
+        if(it.pos.y > SCREENHEIGHT + 20){
+            it.ativo = false;
+            continue;
+        }
+
+        if(CheckCollisionCircleRec(it.pos, 8.0f, paddle)){
+            if(it.tipo == 0 || it.tipo == 1 || it.tipo == 2 || it.tipo == 3 || it.tipo == 4){
+                jogoAtual.pontuacao += 50;
+            }else if(it.tipo == 5 || it.tipo == 6 || it.tipo == 7){
+                jogoAtual.pontuacao -= 50;
+            }
+
+            if(it.tipo == 4){
+                for(int k = 0 ; k < 4; k++){
+                    Bola nb;
+                    nb.raio = 10.0f;
+                    nb.pos.x = posPaddle.x + tamPaddle.x / 2.0f;
+                    nb.pos.y = posPaddle.y - nb.raio - 1.0f;
+                    nb.ativo = true;
+                    nb.preso = false;
+                    if(k < 2) nb.vel.x = -200.0f * multiplicadorVelocidade;
+                    else nb.vel.x = 200.0f * multiplicadorVelocidade;
+
+                    nb.vel.y = -200.0f * multiplicadorVelocidade;
+                    bolas.push_back(nb);
+                }
+            }else{
+                aplicarEfeitosBonus(it.tipo, jogoAtual, tamPaddle, bolas, vidas);
+            }
+
+            it.ativo = false;
+        }
+    }
+}
+
+void desenharInterface(int faseAtual, const Ranking &jogoAtual, int vidas, time_t jogoInicio, Texture2D texture9){
+    char textoRound[20];
+    sprintf(textoRound, "ROUND %d", faseAtual);
+
+    int larguraTextoRound = MeasureText(textoRound, 30);
+    DrawText(textoRound, SCREENWIDTH/2 - larguraTextoRound/2, 35, 30, WHITE);
+
+
+    char textoPontuacao[30];
+    sprintf(textoPontuacao, "Score: %d", jogoAtual.pontuacao);
+
+    DrawText(textoPontuacao, 520, 35, 25, YELLOW);
+
+
+    DrawText("Vidas:", 520, 65, 20, WHITE);
+
+    for (int i = 0; i < vidas; i++) {
+        Rectangle src = { 0.0f, 0.0f, (float)texture9.width, (float)texture9.height };
+        Rectangle dst = { 590.0f + i * 22.0f, 65.0f, 16.0f, 16.0f };
+        Vector2 origin = { 0.0f, 0.0f };
+        DrawTexturePro(texture9, src, dst, origin, 0.0f, WHITE);
+    }
+
+    time_t agora = time(0);
+    int tempoSegundos = difftime(agora, jogoInicio);
+
+    int minutos = tempoSegundos / 60;
+    int segundos = tempoSegundos % 60;
+
+    char textoTempo[20];
+    sprintf(textoTempo, "%02d:%02d", minutos, segundos);
+
+    DrawText(textoTempo, 520, 95, 25, WHITE);
+}
+
 int main() {
     InitWindow(SCREENWIDTH, SCREENHEIGHT, "Arkanoid");
     SetTargetFPS(60);     
-    
+    srand(time(0));
+
     Vector2 posPaddle = {SCREENWIDTH / 1.2f, SCREENHEIGHT /1.05f};
     Vector2 tamPaddle = {PLATAFORMX, PLATAFORMY};
 
@@ -517,6 +687,59 @@ int main() {
     Texture2D texture8 = LoadTextureFromImage(paddle);
     UnloadImage(paddle);
 
+    Image vida = LoadImage("Imagens/vida.png");
+    Texture2D texture9 = LoadTextureFromImage(vida);
+    UnloadImage(vida);
+
+    Image pontos_extras = LoadImage("Imagens/pontos_extras.png");
+    Texture2D texture10 = LoadTextureFromImage(pontos_extras);
+    UnloadImage(pontos_extras);
+
+    Image multiplicador_pontos = LoadImage("Imagens/multiplicador_pontos.png");
+    Texture2D texture11 = LoadTextureFromImage(multiplicador_pontos);
+    UnloadImage(multiplicador_pontos);
+
+    Image aumentarTamPaddle = LoadImage("Imagens/tam_paddle++.png");
+    Texture2D texture13 = LoadTextureFromImage(aumentarTamPaddle);
+    UnloadImage(aumentarTamPaddle);
+
+    Image diminuirTamPaddle = LoadImage("Imagens/tam_paddle--.png");
+    Texture2D texture14 = LoadTextureFromImage(diminuirTamPaddle);
+    UnloadImage(diminuirTamPaddle);
+
+    Image inverterPontuacao = LoadImage("Imagens/inverter_pontuacao.png");
+    Texture2D texture15 = LoadTextureFromImage(inverterPontuacao);
+    UnloadImage(inverterPontuacao);
+
+    Image diminuirVelPaddle = LoadImage("Imagens/vel_paddle--.png");
+    Texture2D texture16 = LoadTextureFromImage(diminuirVelPaddle);
+    UnloadImage(diminuirVelPaddle);
+
+    Image vidaExtra = LoadImage("Imagens/vida++.png");
+    Texture2D texture17 = LoadTextureFromImage(vidaExtra);
+    UnloadImage(vidaExtra);
+
+    Image aumentoPaddle1 = LoadImage("Imagens/paddle_120x20.png");
+    Texture2D texture18 = LoadTextureFromImage(aumentoPaddle1);
+    UnloadImage(aumentoPaddle1);
+
+    Image aumentoPaddle2 = LoadImage("Imagens/paddle_140x20.png");
+    Texture2D texture19 = LoadTextureFromImage(aumentoPaddle2);
+    UnloadImage(aumentoPaddle2);
+
+    Image aumentoPaddle3 = LoadImage("Imagens/paddle_160x20.png");
+    Texture2D texture20 = LoadTextureFromImage(aumentoPaddle3);
+    UnloadImage(aumentoPaddle3);
+
+    Image paddleDiminuido1 = LoadImage("Imagens/paddle_80x20.png");
+    Texture2D texture21 = LoadTextureFromImage(paddleDiminuido1);
+    UnloadImage(paddleDiminuido1);
+
+    Image paddleDiminuido2 = LoadImage("Imagens/paddle_60x20.png");
+    Texture2D texture22 = LoadTextureFromImage(paddleDiminuido2);
+    UnloadImage(paddleDiminuido2);
+
+
     int estadoTela = 0;
 
     vector<Bloco> blocos;
@@ -537,7 +760,14 @@ int main() {
     string nomeDigitado = "";
     bool inserindoNome = false;
     bool tempoRegistrado = false;
-    
+
+    vector<ItemBonus> itensBonus;
+
+    velocidadePaddleAtual = SPEED;
+    multiplicadorPontos = 1;
+    inversorPontuacao = 1;
+    tempoMultiplicador = tempoInversor = tempoPaddleLento = 0.0f;
+
     while (!WindowShouldClose()) {
         float dt = GetFrameTime();
     
@@ -560,32 +790,40 @@ int main() {
 
         if(estadoTela == 1){
             if(resetFase){
+                if (faseAtual == 1 && vidas == 3) {
+                    jogoAtual.pontuacao = 0;
+
+                    bolas.clear();
+                    colocarBolaNoPaddle(bolas, posPaddle, tamPaddle);
+                    
+                    time_t agora = time(0);
+                    jogoInicio = agora;
+
+                    tm *tempo = localtime(&agora);
+                    char horaInicio[9];
+                    strftime(horaInicio, sizeof(horaInicio), "%H:%M:%S", tempo);
+
+                    jogoAtual.hora_inicio = horaInicio;
+
+                    rankingSalvo = false;
+                    tempoRegistrado = false;
+                    inserindoNome = false;
+                    nomeDigitado.clear();
+
+                    jogoAtual.data = "";
+                    jogoAtual.hora_fim = "";
+                    jogoAtual.tempo = "00:00";
+                    jogoAtual.nome = "PLAYER";
+
+                    multiplicadorPontos = 1;
+                    inversorPontuacao = 1;
+                    tempoMultiplicador = 0;
+                    tempoInversor = 0;
+                    tempoPaddleLento = 0;
+                    velocidadePaddleAtual = SPEED;
+                }
+                
                 carregarFases(blocos, faseAtual, texture4, texture5, texture6);
-
-                bolas.clear();
-                colocarBolaNoPaddle(bolas, posPaddle, tamPaddle);
-
-                jogoAtual.pontuacao = 0;
-
-                time_t agora = time(0);
-                jogoInicio = agora;
-
-                tm *tempo = localtime(&agora);
-                char horaInicio[9];
-                strftime(horaInicio, sizeof(horaInicio), "%H:%M:%S", tempo);
-
-                jogoAtual.hora_inicio = horaInicio;
-
-                rankingSalvo = false;
-                tempoRegistrado = false;
-                inserindoNome = false;
-                nomeDigitado.clear();
-
-                jogoAtual.data = "";
-                jogoAtual.hora_fim = "";
-                jogoAtual.tempo = "00:00";
-                jogoAtual.nome = "PLAYER";
-
                 resetFase = false;
             }
 
@@ -593,15 +831,50 @@ int main() {
             ClearBackground(BLACK);
             DrawTexture(texture, SCREENWIDTH/2 - texture.width/2, SCREENHEIGHT/2 - texture.height/2, WHITE);
 
-            movimentarPaddle(posPaddle, lastPos, dt);
 
-            DrawTexture(texture8, posPaddle.x, posPaddle.y, WHITE);
+            movimentarPaddle(posPaddle, lastPos, dt, tamPaddle);
 
+            Texture2D paddleTex = texture8; // padrão
+
+            if(tamPaddle.x >= 160.0f) paddleTex = texture20;
+            else if(tamPaddle.x >= 140.0f) paddleTex = texture19;
+            else if(tamPaddle.x >= 120.0f) paddleTex = texture18;
+            else if(tamPaddle.x <= 60.0f) paddleTex = texture22;
+            else if(tamPaddle.x <= 80.0f) paddleTex = texture21;
+            else paddleTex = texture8;
+
+            Rectangle srcP = { 0.0f, 0.0f, (float)paddleTex.width, (float)paddleTex.height };
+            Rectangle dstP = { posPaddle.x, posPaddle.y, tamPaddle.x, tamPaddle.y };
+            Vector2 originP = { 0.0f, 0.0f };
+            DrawTexturePro(paddleTex, srcP, dstP, originP, 0.0f, WHITE);
+            
             Rectangle paddle = {posPaddle.x, posPaddle.y, tamPaddle.x, tamPaddle.y };
+
+            bool bolaPresa = false;
+
+            for(int i = 0; i < (int)bolas.size(); i++){
+
+                if(bolas[i].preso){
+                    bolaPresa = true;
+
+                    bolas[i].pos.x = posPaddle.x + tamPaddle.x / 2.0f;
+                    bolas[i].pos.y = posPaddle.y - bolas[i].raio - 1.0f;
+
+                    if (lastPos == LEFT) {
+                        bolas[i].preso = false;
+                        bolas[i].vel.x = -200.0f * multiplicadorVelocidade;
+                        bolas[i].vel.y = -200.0f * multiplicadorVelocidade;
+                    }else if (lastPos == RIGHT) {
+                        bolas[i].preso = false;
+                        bolas[i].vel.x =  200.0f * multiplicadorVelocidade;
+                        bolas[i].vel.y = -200.0f * multiplicadorVelocidade;
+                    }
+                }
+            }
 
             for(int i = 0; i < (int)bolas.size(); i++){
                 movimentarBola(bolas[i], dt);
-                checarColisoes(bolas[i], paddle, blocos, jogoAtual);
+                checarColisoes(bolas[i], paddle, blocos, jogoAtual, itensBonus);
             }
 
             for(int i = 0; i < (int)bolas.size(); i++){
@@ -624,18 +897,16 @@ int main() {
                     Rectangle hitboxCima = {b.cima.x, b.cima.y, b.cima.largura, b.cima.altura};
                     Rectangle hitboxBaixo = {b.baixo.x, b.baixo.y, b.baixo.largura, b.baixo.altura};
                     
-                    //DrawRectangleRec(hitboxEsq, b.cor);
+                    //DrawRectangleRec(hitboxEsq, b.cor); //Funcoes para desenhar as hitbox caso seja preciso
                     //DrawRectangleRec(hitboxDir, b.cor);
                     //DrawRectangleRec(hitboxCima, b.cor);
                     //DrawRectangleRec(hitboxBaixo, b.cor);
 
-                    Rectangle areaDaTextura = {0, 0, (float)b.nomeTextura.width, (float)b.nomeTextura.height};
+                    Rectangle areaDaTextura = {0, 0, (float)(*b.nomeTextura).width, (float)(*b.nomeTextura).height};
                     Rectangle areaNaTela = {b.x, b.y, b.largura, b.altura};           
                     Vector2 pontoDeRotacao = {0, 0};
 
-                    DrawTexturePro(b.nomeTextura, areaDaTextura, areaNaTela, pontoDeRotacao, 0.0f, WHITE);
-
-
+                    DrawTexturePro(*b.nomeTextura, areaDaTextura, areaNaTela, pontoDeRotacao, 0.0f, WHITE);
                 }
             }
 
@@ -671,6 +942,42 @@ int main() {
                     salvarTempo(jogoAtual, tempoRegistrado, jogoInicio);
                 }else resetFase = true;
             }
+
+            if(tempoMultiplicador > 0.0f){
+                tempoMultiplicador -= dt;
+                if(tempoMultiplicador <= 0.0f){
+                    multiplicadorPontos = 1;
+                    tempoMultiplicador = 0.0f;
+                }
+            }
+
+            if(tempoInversor > 0.0f){
+                tempoInversor -= dt;
+                if(tempoInversor <= 0.0f){
+                    inversorPontuacao = 1;
+                    tempoInversor = 0.0f;
+                }
+            }
+
+            if(tempoPaddleLento > 0.0f){
+                tempoPaddleLento -= dt;
+                if(tempoPaddleLento <= 0.0f){
+                    velocidadePaddleAtual = SPEED;
+                    tempoPaddleLento = 0.0f;
+                }
+            }
+
+            movimentarEDesenharBonus(dt, itensBonus, paddle, jogoAtual, tamPaddle, bolas, vidas, posPaddle,
+                         texture10, // pontos_extras (usado também como default / bolas extras caso não tenha específica)
+                         texture11, // multiplicador_pontos
+                         texture13, // aumentarTamPaddle
+                         texture14, // diminuirTamPaddle
+                         texture15, // inverterPontuacao
+                         texture16, // diminuirVelPaddle
+                         texture17  // vidaExtra
+                        );
+            desenharInterface(faseAtual, jogoAtual, vidas, jogoInicio, texture9);
+
             DrawFPS(40, 30);
             EndDrawing();
         }
@@ -692,7 +999,7 @@ int main() {
 
             DrawRectangle(75, 275, 650, 340, BLACK);
 
-            DrawText("VOCê VENCEU", 230, 330, 60, GREEN);
+            DrawText("VOCê VENCEU", 190, 330, 60, GREEN);
 
             if(IsKeyPressed(KEY_ENTER)){
                 faseAtual = 1;
